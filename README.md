@@ -63,7 +63,7 @@ Group responses are sorted by seat ID. Booking endpoints do not yet support idem
 Cancellation, authentication, payments, and seat holds are not implemented.
 
 ## Validation
-The automated test currently checks application-context startup and needs a running, initialized PostgreSQL database:
+Run the full automated suite with Docker Desktop running. The original application-context test still needs the local initialized lesson database and BOOKING_DB_PASSWORD; the transaction integration tests create a separate disposable database:
 
 ```powershell
 .\mvnw.cmd "-Duser.timezone=UTC" test
@@ -75,7 +75,7 @@ Lesson experiments performed manually:
 - Competing bookings produce one success and conflicts for the remaining attempts.
 - Group booking failure rolls back earlier inserts; available groups commit together.
 
-Automated coverage does not yet prove these business scenarios.
+Automated transaction tests now cover group commit and rollback. Event idempotency and concurrent capacity checks remain manual scenarios.
 
 ## Daily Git workflow
 ```powershell
@@ -96,3 +96,17 @@ Each show has a positive capacity (default 100). Single and group bookings lock 
 For an existing lesson database that does not yet have capacity, execute database/changes/001_add_show_capacity.sql once in psql after confirming existing booking counts fit the initial limit. Stop the application while applying the change. Do not reapply it or run it after the current fresh-database schema, which already includes capacity.
 
 Manual verification reported during the lesson: capacity 2 accepted two bookings and rejected further requests; two competing requests for different seats with capacity 1 produced one 201, one 409, and one stored booking. The background-job test encourages overlap but does not guarantee simultaneous arrival. These scenarios are not yet covered by automated integration tests.
+## Deadlock retries and automated tests
+Booking requests pass through a non-transactional retry coordinator to the transactional booking service. Only PostgreSQL deadlocks (SQLSTATE 40P01) are retried, with at most three total attempts and short randomized delays. Business conflicts and unrelated database failures are not retried. Exhaustion returns HTTP 503. Booking endpoints still do not provide idempotency for uncertain network outcomes.
+
+- BookingRetryCoordinatorTests: six unit tests covering normal success, recovery, attempt limits, non-retryable failures, and whole-group retry arguments.
+- BookingTransactionTests: two tests using real Spring transactions and disposable PostgreSQL 17 containers. They verify group commit and rollback while preserving a pre-existing booking. The schema is loaded from database/schema.sql.
+- BookingApplicationTests: original application-context/database-connectivity test against the local lesson database.
+
+Run selected tests without the original local-database test:
+
+```powershell
+.\mvnw.cmd '-Duser.timezone=UTC' '-Dtest=BookingRetryCoordinatorTests,BookingTransactionTests' test
+```
+
+The integration tests verify actual commit/rollback; the retry unit tests simulate deadlock errors. End-to-end recovery from a real database deadlock in a fresh transaction is not yet tested.

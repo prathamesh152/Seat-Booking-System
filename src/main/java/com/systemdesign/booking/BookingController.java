@@ -13,10 +13,11 @@ import java.util.Map;
 
 @RestController
 public class BookingController {
-    private final BookingService bookingService;
+    private final BookingRetryCoordinator bookingRetryCoordinator;
 
-    public BookingController(BookingService bookingService) {
-        this.bookingService = bookingService;
+    public BookingController(
+            BookingRetryCoordinator bookingRetryCoordinator) {
+        this.bookingRetryCoordinator = bookingRetryCoordinator;
     }
 
     @PostMapping("/shows/{showId}/bookings")
@@ -32,7 +33,7 @@ public class BookingController {
         }
 
         try {
-            Booking created = bookingService.createBooking(
+            Booking created = bookingRetryCoordinator.createBooking(
                     showId, request.showSeatId()
             );
 
@@ -62,7 +63,7 @@ public class BookingController {
             @RequestBody CreateGroupBookingRequest request) {
 
         try {
-            List<Booking> bookings = bookingService.createGroupBooking(
+            List<Booking> bookings = bookingRetryCoordinator.createGroupBooking(
                     showId, request.showSeatIds()
             );
 
@@ -108,6 +109,15 @@ public class BookingController {
 
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
+                .body(Map.of("message", exception.getMessage()));
+    }
+
+    @ExceptionHandler(BookingRetryExhaustedException.class)
+    public ResponseEntity<Map<String, String>> handleRetryExhausted(
+            BookingRetryExhaustedException exception) {
+
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of("message", exception.getMessage()));
     }
 }
