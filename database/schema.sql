@@ -13,7 +13,8 @@ CREATE TABLE events (
 CREATE TABLE shows (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     event_id BIGINT NOT NULL REFERENCES events(id),
-    starts_at TIMESTAMPTZ NOT NULL
+    starts_at TIMESTAMPTZ NOT NULL,
+    capacity INTEGER NOT NULL DEFAULT 100 CHECK (capacity > 0)
 );
 
 CREATE TABLE show_seats (

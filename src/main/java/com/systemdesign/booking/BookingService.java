@@ -1,6 +1,7 @@
 package com.systemdesign.booking;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
@@ -16,20 +17,28 @@ public class BookingService {
         this.bookingRepository = bookingRepository;
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public Booking createBooking(long showId, long showSeatId) {
         return createGroupBooking(
                 showId, List.of(showSeatId)
         ).getFirst();
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public List<Booking> createGroupBooking(
             long showId, List<Long> showSeatIds) {
 
         validateRequest(showId, showSeatIds);
 
-        // Consistent insertion order reduces deadlock risk.
+        Integer capacity =
+                bookingRepository.lockShowAndGetCapacity(showId);
+
+        if (capacity == null) {
+            throw new ShowNotFoundException(
+                    "Show " + showId + " not found"
+            );
+        }
+
         List<Long> orderedSeatIds = showSeatIds.stream()
                 .sorted()
                 .toList();
@@ -40,6 +49,15 @@ public class BookingService {
                         "Seat " + seatId + " not found for show " + showId
                 );
             }
+        }
+
+        long existingBookings =
+                bookingRepository.countBookingsForShow(showId);
+
+        if (existingBookings + orderedSeatIds.size() > capacity) {
+            throw new InsufficientCapacityException(
+                    "Not enough capacity for the requested seats"
+            );
         }
 
         List<Booking> bookings = new ArrayList<>();

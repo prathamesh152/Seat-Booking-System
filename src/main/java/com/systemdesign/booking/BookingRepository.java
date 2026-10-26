@@ -42,4 +42,34 @@ public class BookingRepository {
 
         return inserted.isEmpty() ? null : inserted.getFirst();
     }
+
+    public Integer lockShowAndGetCapacity(long showId) {
+        var capacities = jdbcTemplate.query(
+                """
+                SELECT capacity
+                FROM shows
+                WHERE id = ?
+                FOR UPDATE
+                """,
+                (rs, rowNum) -> rs.getInt("capacity"),
+                showId
+        );
+
+        return capacities.isEmpty() ? null : capacities.getFirst();
+    }
+
+    public long countBookingsForShow(long showId) {
+        Long count = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM bookings b
+                JOIN show_seats s ON s.id = b.show_seat_id
+                WHERE s.show_id = ?
+                """,
+                Long.class,
+                showId
+        );
+
+        return count == null ? 0L : count;
+    }
 }

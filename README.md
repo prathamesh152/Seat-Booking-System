@@ -89,3 +89,10 @@ git push
 ```
 
 Review staged files for secrets and unintended changes before committing. Commit tested learning milestones; write a brief note describing the change and how you verified it.
+
+## Capacity enforcement lesson
+Each show has a positive capacity (default 100). Single and group bookings lock the show row with SELECT ... FOR UPDATE inside a Read Committed transaction, count existing bookings, and reject groups that would exceed capacity with HTTP 409. Missing shows return 404. Every capacity-consuming writer must follow this protocol; direct SQL inserts can bypass the application check.
+
+For an existing lesson database that does not yet have capacity, execute database/changes/001_add_show_capacity.sql once in psql after confirming existing booking counts fit the initial limit. Stop the application while applying the change. Do not reapply it or run it after the current fresh-database schema, which already includes capacity.
+
+Manual verification reported during the lesson: capacity 2 accepted two bookings and rejected further requests; two competing requests for different seats with capacity 1 produced one 201, one 409, and one stored booking. The background-job test encourages overlap but does not guarantee simultaneous arrival. These scenarios are not yet covered by automated integration tests.

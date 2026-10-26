@@ -1,0 +1,3 @@
+ALTER TABLE shows
+ADD COLUMN capacity INTEGER NOT NULL DEFAULT 100
+    CHECK (capacity > 0);

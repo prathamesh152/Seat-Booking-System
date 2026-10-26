@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.http.ResponseEntity;
 import java.util.List;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import java.util.Map;
 
 @RestController
 public class BookingController {
@@ -89,5 +91,23 @@ public class BookingController {
                     exception
             );
         }
+    }
+
+    @ExceptionHandler(ShowNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleMissingShow(
+            ShowNotFoundException exception) {
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(Map.of("message", exception.getMessage()));
+    }
+
+    @ExceptionHandler(InsufficientCapacityException.class)
+    public ResponseEntity<Map<String, String>> handleInsufficientCapacity(
+            InsufficientCapacityException exception) {
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Map.of("message", exception.getMessage()));
     }
 }
