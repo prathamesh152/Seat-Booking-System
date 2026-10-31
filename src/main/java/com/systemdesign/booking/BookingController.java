@@ -120,4 +120,22 @@ public class BookingController {
                 .status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of("message", exception.getMessage()));
     }
+
+    @ExceptionHandler(ShowBusyException.class)
+    public ResponseEntity<Map<String, String>> handleBusyShow(
+            ShowBusyException exception) {
+
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Map.of("message", exception.getMessage()));
+    }
+
+    @ExceptionHandler(BookingOverloadedException.class)
+    public ResponseEntity<Map<String, String>> handleOverload(
+            BookingOverloadedException exception) {
+
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Map.of("message", exception.getMessage()));
+    }
 }

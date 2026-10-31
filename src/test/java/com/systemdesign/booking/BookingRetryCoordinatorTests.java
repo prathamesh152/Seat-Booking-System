@@ -19,7 +19,10 @@ class BookingRetryCoordinatorTests {
     @BeforeEach
     void setUp() {
         bookingService = mock(BookingService.class);
-        coordinator = new BookingRetryCoordinator(bookingService);
+        coordinator = new BookingRetryCoordinator(
+                bookingService,
+                new BookingAdmissionControl()
+        );
     }
 
     @Test

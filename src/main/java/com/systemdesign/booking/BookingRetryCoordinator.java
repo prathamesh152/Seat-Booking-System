@@ -13,6 +13,8 @@ import java.util.function.Supplier;
 @Service
 public class BookingRetryCoordinator {
 
+    private final BookingAdmissionControl admissionControl;
+
     private static final Logger log =
             LoggerFactory.getLogger(BookingRetryCoordinator.class);
 
@@ -20,22 +22,32 @@ public class BookingRetryCoordinator {
 
     private final BookingService bookingService;
 
-    public BookingRetryCoordinator(BookingService bookingService) {
+    public BookingRetryCoordinator(
+            BookingService bookingService,
+            BookingAdmissionControl admissionControl) {
+
         this.bookingService = bookingService;
+        this.admissionControl = admissionControl;
     }
 
     public Booking createBooking(long showId, long showSeatId) {
-        return executeWithRetry(
-                () -> bookingService.createBooking(showId, showSeatId)
+        return admissionControl.execute(
+                () -> executeWithRetry(
+                        () -> bookingService.createBooking(
+                                showId, showSeatId
+                        )
+                )
         );
     }
 
     public List<Booking> createGroupBooking(
             long showId, List<Long> showSeatIds) {
 
-        return executeWithRetry(
-                () -> bookingService.createGroupBooking(
-                        showId, showSeatIds
+        return admissionControl.execute(
+                () -> executeWithRetry(
+                        () -> bookingService.createGroupBooking(
+                                showId, showSeatIds
+                        )
                 )
         );
     }

@@ -1,6 +1,8 @@
 package com.systemdesign.booking;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.dao.DataAccessException;
+import java.sql.SQLException;
 
 @Repository
 public class BookingRepository {
@@ -44,18 +46,48 @@ public class BookingRepository {
     }
 
     public Integer lockShowAndGetCapacity(long showId) {
-        var capacities = jdbcTemplate.query(
-                """
-                SELECT capacity
-                FROM shows
-                WHERE id = ?
-                FOR UPDATE
-                """,
-                (rs, rowNum) -> rs.getInt("capacity"),
-                showId
-        );
+        // Applies only to the current booking transaction.
+        jdbcTemplate.execute("SET LOCAL lock_timeout = '2s'");
 
-        return capacities.isEmpty() ? null : capacities.getFirst();
+        try {
+            var capacities = jdbcTemplate.query(
+                    """
+                    SELECT capacity
+                    FROM shows
+                    WHERE id = ?
+                    FOR UPDATE
+                    """,
+                    (rs, rowNum) -> rs.getInt("capacity"),
+                    showId
+            );
+
+            return capacities.isEmpty() ? null : capacities.getFirst();
+
+        } catch (DataAccessException exception) {
+            if (hasSqlState(exception, "55P03")) {
+                throw new ShowBusyException(
+                        "Show is busy; please try again later",
+                        exception
+                );
+            }
+
+            throw exception;
+        }
+    }
+
+    private boolean hasSqlState(Throwable exception, String state) {
+        Throwable current = exception;
+
+        while (current != null) {
+            if (current instanceof SQLException sqlException
+                    && state.equals(sqlException.getSQLState())) {
+                return true;
+            }
+
+            current = current.getCause();
+        }
+
+        return false;
     }
 
     public long countBookingsForShow(long showId) {

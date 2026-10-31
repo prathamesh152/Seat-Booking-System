@@ -100,7 +100,7 @@ Manual verification reported during the lesson: capacity 2 accepted two bookings
 Booking requests pass through a non-transactional retry coordinator to the transactional booking service. Only PostgreSQL deadlocks (SQLSTATE 40P01) are retried, with at most three total attempts and short randomized delays. Business conflicts and unrelated database failures are not retried. Exhaustion returns HTTP 503. Booking endpoints still do not provide idempotency for uncertain network outcomes.
 
 - BookingRetryCoordinatorTests: six unit tests covering normal success, recovery, attempt limits, non-retryable failures, and whole-group retry arguments.
-- BookingTransactionTests: two tests using real Spring transactions and disposable PostgreSQL 17 containers. They verify group commit and rollback while preserving a pre-existing booking. The schema is loaded from database/schema.sql.
+- BookingTransactionTests: three tests using real Spring transactions and disposable PostgreSQL 17 containers. They verify group commit, rollback while preserving a pre-existing booking, and show-lock timeout followed by recovery. The schema is loaded from database/schema.sql.
 - BookingApplicationTests: original application-context/database-connectivity test against the local lesson database.
 
 Run selected tests without the original local-database test:
@@ -121,3 +121,10 @@ Repeat the read-only check from PowerShell with Docker and the database running:
 ```powershell
 Get-Content -Raw .\database\diagnostics\booking_count_plan.sql | docker exec -i booking-postgres psql -v ON_ERROR_STOP=1 -v show_id=2 -U booking -d booking
 ```
+
+## Admission control and bounded waiting
+BookingAdmissionControl allows at most four active booking operations per application instance using a semaphore. Excess operations are rejected immediately with HTTP 503. A permit spans all deadlock attempts and backoff and is released in finally on success or failure. This is an instructional concurrency limit, not a measured production setting or a requests-per-second rate limit. Multiple application instances each have their own limit, and event endpoints are not covered by it.
+
+Booking transactions set a transaction-local PostgreSQL lock_timeout of two seconds. Timeout while acquiring the show lock (SQLSTATE 55P03) becomes ShowBusyException and HTTP 503 without deadlock retry. The setting ends with the transaction; it is not a total request deadline. The Hikari connection-acquisition timeout is separate from database lock waiting. Normal application pool sizing is unchanged.
+
+BookingAdmissionControlTests uses latches to verify overlapping requests, rejection without executing work, recovery after release, and release after failures. DatabaseConnectionPoolTests uses a separate disposable PostgreSQL container and a two-connection test pool to verify acquisition timeout and subsequent recovery. The application retains its normal pool configuration. HTTP 503 mapping has been checked manually; the new automated checks cover the admission component and database/service behavior.

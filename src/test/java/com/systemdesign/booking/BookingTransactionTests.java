@@ -1,5 +1,7 @@
 package com.systemdesign.booking;
 
+import javax.sql.DataSource;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -53,6 +55,9 @@ class BookingTransactionTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private DataSource dataSource;
+
     private long showId;
     private long firstSeatId;
     private long secondSeatId;
@@ -80,6 +85,55 @@ class BookingTransactionTests {
 
         firstSeatId = insertSeat("A1");
         secondSeatId = insertSeat("A2");
+    }
+
+    @Test
+    void timesOutOnBusyShowAndSucceedsAfterLockIsReleased()
+            throws Exception {
+
+        // A separate connection represents another transaction.
+        try (var holder = dataSource.getConnection()) {
+            holder.setAutoCommit(false);
+
+            try {
+                try (var statement = holder.prepareStatement(
+                        "SELECT id FROM shows WHERE id = ? FOR UPDATE")) {
+
+                    statement.setLong(1, showId);
+
+                    try (var result = statement.executeQuery()) {
+                        assertTrue(result.next());
+                    }
+                }
+
+                // The holder keeps its transaction open and retains the lock.
+                ShowBusyException exception = assertThrows(
+                        ShowBusyException.class,
+                        () -> bookingService.createBooking(
+                                showId, firstSeatId
+                        )
+                );
+
+                assertEquals(
+                        "Show is busy; please try again later",
+                        exception.getMessage()
+                );
+
+                // The failed booking request created no booking.
+                assertEquals(0L, countBookings(firstSeatId));
+
+            } finally {
+                // Always release the lock, even if an assertion fails.
+                holder.rollback();
+            }
+        }
+
+        // A new booking transaction should now succeed.
+        Booking created =
+                bookingService.createBooking(showId, firstSeatId);
+
+        assertEquals(firstSeatId, created.showSeatId());
+        assertEquals(1L, countBookings(firstSeatId));
     }
 
     @Test
