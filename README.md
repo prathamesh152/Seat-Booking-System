@@ -110,3 +110,14 @@ Run selected tests without the original local-database test:
 ```
 
 The integration tests verify actual commit/rollback; the retry unit tests simulate deadlock errors. End-to-end recovery from a real database deadlock in a fresh transaction is not yet tested.
+
+## Database index review
+The current schema already creates indexes for show locking (shows primary key), seat lookup (show_seats primary key), show seat filtering (the leading show_id in UNIQUE (show_id, seat_label)), and booking joins (UNIQUE (show_seat_id)). No redundant indexes were added.
+
+A local plan for show 2 used the composite show-seat index and the unique booking-seat index. One small-data run returned six bookings with 2.359 ms execution time; this is a diagnostic observation, not a load benchmark or production latency target. Exact counts still grow with relevant data and must be reconsidered at scale.
+
+Repeat the read-only check from PowerShell with Docker and the database running:
+
+```powershell
+Get-Content -Raw .\database\diagnostics\booking_count_plan.sql | docker exec -i booking-postgres psql -v ON_ERROR_STOP=1 -v show_id=2 -U booking -d booking
+```
