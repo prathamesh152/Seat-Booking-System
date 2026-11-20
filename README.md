@@ -128,3 +128,12 @@ BookingAdmissionControl allows at most four active booking operations per applic
 Booking transactions set a transaction-local PostgreSQL lock_timeout of two seconds. Timeout while acquiring the show lock (SQLSTATE 55P03) becomes ShowBusyException and HTTP 503 without deadlock retry. The setting ends with the transaction; it is not a total request deadline. The Hikari connection-acquisition timeout is separate from database lock waiting. Normal application pool sizing is unchanged.
 
 BookingAdmissionControlTests uses latches to verify overlapping requests, rejection without executing work, recovery after release, and release after failures. DatabaseConnectionPoolTests uses a separate disposable PostgreSQL container and a two-connection test pool to verify acquisition timeout and subsequent recovery. The application retains its normal pool configuration. HTTP 503 mapping has been checked manually; the new automated checks cover the admission component and database/service behavior.
+
+## Observability
+Spring Boot Actuator exposes health and metrics locally at http://127.0.0.1:9091/actuator, while application routes remain on port 8080. Only health and metrics are exposed. Built-in HTTP, JVM, and Hikari metrics are available. HTTP timings can be filtered with repeated tag query parameters, such as uri:/events/{id} and status:200. COUNT and TOTAL_TIME describe completed requests; MAX is windowed, so it can reset while accumulated count and total remain populated. These measurements alone do not provide latency percentiles.
+
+Custom admission metrics:
+- booking.operations.active: gauge derived from occupied semaphore permits; includes admitted operations waiting for connections/locks or doing retries/backoff.
+- booking.admission.rejected: counter incremented only when a permit cannot be acquired, not when an admitted operation fails.
+
+Both metrics are per instance and reset with process restart. They have no event, seat, or request-ID tags. Admission unit tests verify the active gauge while workers hold permits, rejection counts, and return to zero after completion and failures. Metric endpoint registration was checked manually; management HTTP endpoints are not yet covered by automated endpoint tests. A zero gauge at rest does not prove that no requests occurred between observations.

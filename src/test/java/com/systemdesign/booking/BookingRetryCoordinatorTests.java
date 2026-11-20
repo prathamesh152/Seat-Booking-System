@@ -10,6 +10,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 class BookingRetryCoordinatorTests {
 
@@ -21,7 +22,7 @@ class BookingRetryCoordinatorTests {
         bookingService = mock(BookingService.class);
         coordinator = new BookingRetryCoordinator(
                 bookingService,
-                new BookingAdmissionControl()
+                new BookingAdmissionControl(new SimpleMeterRegistry())
         );
     }
 

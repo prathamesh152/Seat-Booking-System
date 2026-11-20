@@ -10,6 +10,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -20,8 +21,10 @@ class BookingAdmissionControlTests {
     void rejectsExcessOperationsAndRecoversAfterRelease()
             throws Exception {
 
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+
         BookingAdmissionControl admission =
-                new BookingAdmissionControl();
+                new BookingAdmissionControl(registry);
 
         CountDownLatch entered = new CountDownLatch(4);
         CountDownLatch release = new CountDownLatch(1);
@@ -46,6 +49,11 @@ class BookingAdmissionControlTests {
                         "Four operations should enter admission control"
                 );
 
+                assertEquals(
+                        4.0,
+                        registry.get("booking.operations.active").gauge().value()
+                );
+
                 AtomicBoolean rejectedOperationRan =
                         new AtomicBoolean(false);
 
@@ -65,6 +73,11 @@ class BookingAdmissionControlTests {
                         () -> admission.execute(() -> "must not run")
                 );
 
+                assertEquals(
+                        2.0,
+                        registry.get("booking.admission.rejected").counter().count()
+                );
+
             } finally {
                 // Unblock workers even if an assertion fails.
                 release.countDown();
@@ -81,15 +94,21 @@ class BookingAdmissionControlTests {
                     "accepted again",
                     admission.execute(() -> "accepted again")
             );
+
+            assertEquals(
+                    0.0,
+                    registry.get("booking.operations.active").gauge().value()
+            );
         }
     }
 
     @Test
     void failingOperationsDoNotLeakPermits() {
-        BookingAdmissionControl admission =
-                new BookingAdmissionControl();
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        // More failures than the total number of permits.
+        BookingAdmissionControl admission =
+                new BookingAdmissionControl(registry);
+
         for (int i = 0; i < 10; i++) {
             IllegalStateException failure = assertThrows(
                     IllegalStateException.class,
@@ -109,6 +128,16 @@ class BookingAdmissionControlTests {
         assertEquals(
                 "still available",
                 admission.execute(() -> "still available")
+        );
+
+        assertEquals(
+                0.0,
+                registry.get("booking.operations.active").gauge().value()
+        );
+
+        assertEquals(
+                0.0,
+                registry.get("booking.admission.rejected").counter().count()
         );
     }
 
